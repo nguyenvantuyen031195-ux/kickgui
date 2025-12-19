@@ -1,8 +1,7 @@
 --[[ 
-    GINGERBREAD MONITOR 2025 - PHIÊN BẢN SIÊU NHẸ (20s REFRESH)
-    - Cập nhật GUI mỗi 20 giây (Tối ưu CPU tối đa).
-    - Giữ nguyên: 3 dòng to bằng nhau, Chống mất GUI, Nút Ẩn/Hiện.
-    - Logic 12 phút: Kick nếu số không đổi.
+    GINGERBREAD MONITOR 2025 - PHIÊN BẢN UPDATE KICK 1908
+    - Cập nhật GUI mỗi 60 giây (Siêu nhẹ CPU).
+    - Kick nếu: Không đổi HOẶC tăng đúng 1908.
 ]]
 
 task.wait(15)
@@ -10,19 +9,15 @@ task.wait(15)
 local player = game.Players.LocalPlayer
 local CURRENCY_NAME = "gingerbread_2025"
 local CHECK_INTERVAL = 12 * 60
-local UI_REFRESH_RATE = 60 -- 20 giây cập nhật một lần để siêu nhẹ CPU
+local UI_REFRESH_RATE = 60 
 
 local startTime = os.time()
 local lastValue = -1
 local displayDiff = 0 
 local isVisible = true
 
--- TỐI ƯU: Require module một lần duy nhất
 local ClientDataModule = require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
 
---------------------------------------------------
--- HỆ THỐNG GIAO DIỆN (BẤT TỬ)
---------------------------------------------------
 local HopGui = Instance.new("ScreenGui")
 local MainFrame = Instance.new("Frame")
 local UIList = Instance.new("UIListLayout")
@@ -81,9 +76,6 @@ ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = isVisible
 end)
 
---------------------------------------------------
--- LOGIC DỮ LIỆU
---------------------------------------------------
 local function GetValue()
     local success, data = pcall(function()
         return ClientDataModule.get_data()[player.Name]
@@ -103,14 +95,10 @@ local function ApplyStyle(err)
     LTime.TextColor3 = txt
 end
 
--- VÒNG LẶP CẬP NHẬT GUI (20 GIÂY/LẦN)
 task.spawn(function()
     while true do
-        -- 1. Thời gian
         local elapsed = os.time() - startTime
         LTime.Text = math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60)
-        
-        -- 2. Số liệu
         local currentVal = GetValue()
         if currentVal then
             LTotal.Text = tostring(currentVal)
@@ -120,22 +108,26 @@ task.spawn(function()
     end
 end)
 
--- VÒNG LẶP KIỂM TRA KICK (12 PHÚT/LẦN)
 task.spawn(function()
     repeat lastValue = GetValue() task.wait(2) until lastValue ~= nil
-    
     while true do
         task.wait(CHECK_INTERVAL)
         local newVal = GetValue()
-        
         if newVal ~= nil then
-            if newVal == lastValue then
+            local diff = newVal - lastValue
+            if diff == 0 then
                 ApplyStyle(true)
                 task.wait(2)
                 player:Kick("Gingerbread không đổi trong 12 phút!")
                 return
+            elseif diff == 1908 then
+                displayDiff = diff
+                ApplyStyle(true)
+                task.wait(2)
+                player:Kick("Phát hiện tăng đúng 1908!")
+                return
             else
-                displayDiff = newVal - lastValue
+                displayDiff = diff
                 lastValue = newVal
                 ApplyStyle(false)
             end
