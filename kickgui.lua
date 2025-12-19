@@ -1,10 +1,10 @@
 --[[ 
-    PHIÊN BẢN CHỐNG NGẮT SCRIPT (ANTI-TERMINATE)
-    - Tự động phát hiện và khởi động lại toàn bộ hệ thống khi chuyển Map.
-    - Ép buộc hiển thị ngay cả khi game load lại môi trường.
+    PHIÊN BẢN SỬA LỖI HIỂN THỊ "LABEL"
+    - Chờ 15 giây khởi động.
+    - Cơ chế quét tìm Label liên tục (Dynamic Fetching).
+    - Tự động hiện lại GUI nếu bị game xóa khi chuyển map.
 ]]
 
--- Đợi 15 giây để map đầu tiên load xong hoàn toàn
 task.wait(15)
 
 local player = game.Players.LocalPlayer
@@ -12,20 +12,15 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 local CURRENCY_NAME = "gingerbread_2025"
 local CHECK_INTERVAL = 12 * 60 
 
--- Khởi tạo biến môi trường (Lưu ngoài vòng lặp)
-_G.MonitorRunning = _G.MonitorRunning or false
-if _G.MonitorRunning then return end -- Ngăn chạy đè nhiều script
-_G.MonitorRunning = true
-
 local startTime = os.time()
 local lastValue = -1
 local isVisible = true
-local isError = false
+local isErrorState = false
 
 --------------------------------------------------
 -- HÀM TẠO GIAO DIỆN
 --------------------------------------------------
-local function BuildUI()
+local function CreateGUI()
     local existing = PlayerGui:FindFirstChild("GINGER_MONITOR")
     if existing then existing:Destroy() end
 
@@ -33,13 +28,13 @@ local function BuildUI()
     sg.Name = "GINGER_MONITOR"
     sg.IgnoreGuiInset = true
     sg.DisplayOrder = 999999999
-    sg.ResetOnSpawn = false -- Cố gắng giữ lại
+    sg.ResetOnSpawn = false
     sg.Parent = PlayerGui
 
     local main = Instance.new("Frame")
-    main.Name = "Main"
+    main.Name = "MainFrame"
     main.Size = UDim2.new(1, 0, 1, 0)
-    main.BackgroundColor3 = isError and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
+    main.BackgroundColor3 = isErrorState and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
     main.BorderSizePixel = 0
     main.Visible = isVisible
     main.Parent = sg
@@ -49,96 +44,97 @@ local function BuildUI()
     list.VerticalAlignment = Enum.VerticalAlignment.Center
     list.Parent = main
 
-    local function createLabel(name, size)
+    local function makeLabel(name, size)
         local l = Instance.new("TextLabel")
         l.Name = name
         l.Size = size
         l.BackgroundTransparency = 1
-        l.TextColor3 = isError and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+        l.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
         l.Font = Enum.Font.GothamBold
         l.TextScaled = true
         l.RichText = true
+        l.Text = "" -- Để trống để không hiện chữ "Label" mặc định
         l.Parent = main
         return l
     end
 
-    local lTime = createLabel("LTime", UDim2.new(1, 0, 0.2, 0))
-    local lTotal = createLabel("LTotal", UDim2.new(1, 0, 0.4, 0))
-    local lDiff = createLabel("LDiff", UDim2.new(1, 0, 0.2, 0))
+    makeLabel("TimeLabel", UDim2.new(1, 0, 0.2, 0))
+    makeLabel("TotalLabel", UDim2.new(1, 0, 0.4, 0))
+    makeLabel("DiffLabel", UDim2.new(1, 0, 0.2, 0))
 
     local btn = Instance.new("TextButton")
+    btn.Name = "ToggleBtn"
     btn.Size = UDim2.new(0, 120, 0, 45)
     btn.Position = UDim2.new(0.01, 0, 0.98, -50)
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Text = "ẨN / HIỆN"
+    btn.Font = Enum.Font.GothamBold
     btn.Parent = sg
 
     btn.MouseButton1Click:Connect(function()
         isVisible = not isVisible
         main.Visible = isVisible
     end)
+end
 
-    return main, lTime, lTotal, lDiff
+-- Hàm tìm kiếm các nhãn hiện đang có trong PlayerGui
+local function GetUIElements()
+    local sg = PlayerGui:FindFirstChild("GINGER_MONITOR")
+    if sg and sg:FindFirstChild("MainFrame") then
+        local main = sg.MainFrame
+        return main, main:FindFirstChild("TimeLabel"), main:FindFirstChild("TotalLabel"), main:FindFirstChild("DiffLabel")
+    end
+    return nil
 end
 
 --------------------------------------------------
--- VÒNG LẶP CHÍNH (Sử dụng Pcall để chống crash)
+-- VẬN HÀNH
 --------------------------------------------------
 
-local function StartSystem()
-    local main, lTime, lTotal, lDiff = BuildUI()
-    
-    -- Vòng lặp cập nhật UI & Đồng hồ (Cực nhanh để chống mất)
-    task.spawn(function()
-        while true do
-            if not sg or not sg.Parent then
-                 main, lTime, lTotal, lDiff = BuildUI()
-            end
-            
+-- 1. Vòng lặp Bảo vệ GUI & Đồng hồ (Cập nhật mỗi giây)
+task.spawn(function()
+    while true do
+        local main, lTime = GetUIElements()
+        if not main then
+            CreateGUI()
+        else
             local elapsed = os.time() - startTime
-            lTime.Text = "<b>" .. math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60) .. "</b>"
-            task.wait(1)
+            local h = math.floor(elapsed / 3600)
+            local m = math.floor((elapsed % 3600) / 60)
+            if lTime then lTime.Text = "<b>" .. h .. " : " .. m .. "</b>" end
         end
-    end)
-
-    -- Vòng lặp kiểm tra tiền
-    task.spawn(function()
-        local ClientData = require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
-        
-        while true do
-            local success, result = pcall(function()
-                local data = ClientData.get_data()[player.Name]
-                local val = data and (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME] or data[CURRENCY_NAME])
-                
-                if val then
-                    lTotal.Text = "<b>" .. val .. "</b>"
-                    if lastValue ~= -1 then
-                        local diff = val - lastValue
-                        lDiff.Text = "<b>" .. (diff > 0 and "+" or "") .. diff .. "</b>"
-                        
-                        if diff == 0 then
-                            isError = true
-                            main.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-                            lTime.TextColor3 = Color3.fromRGB(0,0,0)
-                            lTotal.TextColor3 = Color3.fromRGB(0,0,0)
-                            lDiff.TextColor3 = Color3.fromRGB(0,0,0)
-                            task.wait(2)
-                            player:Kick("GINGERBREAD KHÔNG ĐỔI!")
-                        end
-                    end
-                    lastValue = val
-                end
-            end)
-            task.wait(CHECK_INTERVAL)
-        end
-    end)
-end
-
--- Lệnh quan trọng: Tự động chạy lại khi phát hiện môi trường game bị thay đổi
-player.CharacterAdded:Connect(function()
-    task.wait(5) -- Chờ nhân vật load xong map mới
-    BuildUI()
+        task.wait(1)
+    end
 end)
 
-StartSystem()
+-- 2. Vòng lặp Kiểm tra tiền (Cập nhật mỗi 12 phút)
+task.spawn(function()
+    local ClientData = require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
+    
+    while true do
+        local data = ClientData.get_data()[player.Name]
+        local val = data and (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME] or data[CURRENCY_NAME])
+        
+        local main, _, lTotal, lDiff = GetUIElements()
+        
+        if val and lTotal then
+            lTotal.Text = "<b>" .. val .. "</b>"
+            
+            if lastValue ~= -1 then
+                local diff = val - lastValue
+                if lDiff then lDiff.Text = "<b>" .. (diff > 0 and "+" or "") .. diff .. "</b>" end
+                
+                if diff == 0 then
+                    isErrorState = true -- Kích hoạt trạng thái đỏ
+                    player:Kick("\n[HỆ THỐNG]\nGingerbread không đổi!")
+                    return
+                end
+            else
+                if lDiff then lDiff.Text = "<b>0</b>" end
+            end
+            lastValue = val
+        end
+        task.wait(CHECK_INTERVAL)
+    end
+end)
