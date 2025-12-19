@@ -1,4 +1,4 @@
-task.wait(15)
+task.wait(5)
 local CURRENCY_NAME = "gingerbread_2025"
 local CHECK_INTERVAL = 12 * 60 
 local ClientData = require(game.ReplicatedStorage.ClientModules.Core.ClientData)
