@@ -1,161 +1,162 @@
---[[ 
-    HỆ THỐNG GIÁM SÁT GINGERBREAD 2025 - PHIÊN BẢN FIX LỖI PARSING
-    - Chờ 35 giây trước khi chạy.
-    - Sửa lỗi cú pháp "expected identifier".
-    - Chống mất GUI khi chuyển map lần đầu.
+--[[
+    GINGERBREAD MONITOR 2025 - PERSISTENT & RESPONSIVE
+    - CoreGui/gethui: Chống mất GUI 100%.
+    - Responsive: Tự động co giãn theo mọi độ phân giải màn hình.
+    - Toggle Button: Nút ẩn/hiện hệ thống.
+    - Logic 12 phút: Kick nếu số không đổi.
 ]]
 
-task.wait(35)
+task.wait(15)
 
--- Cấu hình
-local CURRENCY_NAME = "gingerbread_2025"
-local CHECK_INTERVAL = 12 * 60 
-local ClientData = require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
 local player = game.Players.LocalPlayer
+local CURRENCY_NAME = "gingerbread_2025"
+local CHECK_INTERVAL = 12 * 60
+
 local startTime = os.time()
-
 local lastValue = -1
-local isVisible = true
 local isErrorState = false
+local isVisible = true
 
 --------------------------------------------------
--- HÀM TẠO GIAO DIỆN
+-- HỆ THỐNG GIAO DIỆN (BẤT TỬ)
 --------------------------------------------------
-local function CreateGUI()
-    local PlayerGui = player:WaitForChild("PlayerGui")
-    local old = PlayerGui:FindFirstChild("GingerbreadMonitor_Delayed")
-    if old then old:Destroy() end
+local HopGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local UIList = Instance.new("UIListLayout")
 
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "GingerbreadMonitor_Delayed"
-    sg.IgnoreGuiInset = true 
-    sg.DisplayOrder = 999999999 
-    sg.ResetOnSpawn = false
-    sg.Parent = PlayerGui
-
-    local main = Instance.new("Frame")
-    main.Name = "MainFrame"
-    main.Size = UDim2.new(1, 0, 1, 0)
-    main.BackgroundColor3 = isErrorState and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
-    main.BorderSizePixel = 0
-    main.Visible = isVisible
-    main.Parent = sg
-
-    local uiList = Instance.new("UIListLayout")
-    uiList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    uiList.VerticalAlignment = Enum.VerticalAlignment.Center
-    uiList.Parent = main
-
-    local function makeLabel(name, size)
-        local l = Instance.new("TextLabel")
-        l.Name = name
-        l.Size = size
-        l.BackgroundTransparency = 1
-        l.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-        l.Font = Enum.Font.GothamBold
-        l.TextScaled = true
-        l.RichText = true
-        l.Text = ""
-        l.Parent = main
-        return l
-    end
-
-    makeLabel("LTime", UDim2.new(1, 0, 0.2, 0))
-    makeLabel("LTotal", UDim2.new(1, 0, 0.4, 0))
-    makeLabel("LDiff", UDim2.new(1, 0, 0.2, 0))
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 120, 0, 45)
-    btn.Position = UDim2.new(0.01, 0, 0.98, -50)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Font = Enum.Font.GothamBold
-    btn.Text = "ẨN / HIỆN"
-    btn.Parent = sg
-
-    btn.MouseButton1Click:Connect(function()
-        isVisible = not isVisible
-        main.Visible = isVisible
-    end)
+-- Gắn vào CoreGui hoặc gethui (Học tập từ script bạn gửi)
+if gethui then
+    HopGui.Parent = gethui()
+elseif game:GetService("CoreGui"):FindFirstChild("RobloxGui") then
+    HopGui.Parent = game:GetService("CoreGui").RobloxGui
+else
+    HopGui.Parent = game:GetService("CoreGui")
 end
 
---------------------------------------------------
--- LOGIC XỬ LÝ
---------------------------------------------------
+HopGui.Name = "GingerSystem_V3"
+HopGui.IgnoreGuiInset = true
+HopGui.DisplayOrder = 999999
 
-local function fetchGingerbread()
-    local success, data = pcall(function()
-        return ClientData.get_data()[player.Name]
+-- Khung chính full màn hình
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = HopGui
+MainFrame.Size = UDim2.new(1, 0, 1, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MainFrame.BorderSizePixel = 0
+MainFrame.ZIndex = 1
+
+UIList.Parent = MainFrame
+UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIList.VerticalAlignment = Enum.VerticalAlignment.Center
+UIList.Padding = UDim.new(0.05, 0)
+
+-- Hàm tạo nhãn tự co giãn
+local function createLabel(name, heightScale)
+    local label = Instance.new("TextLabel")
+    label.Name = name
+    label.Parent = MainFrame
+    label.Size = UDim2.new(0.8, 0, heightScale, 0) -- Chiều ngang chiếm 80% màn hình
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.FredokaOne
+    label.TextColor3 = Color3.fromRGB(0, 255, 127) -- Màu xanh mặc định
+    label.TextScaled = true
+    label.RichText = true
+    
+    -- Ràng buộc tỷ lệ để không bị méo khi đổi độ phân giải
+    local aspect = Instance.new("UIAspectRatioConstraint")
+    aspect.AspectRatio = 5 -- Tỷ lệ rộng:cao
+    aspect.Parent = label
+    
+    return label
+end
+
+local LTotal = createLabel("LTotal", 0.3)
+local LDiff = createLabel("LDiff", 0.2)
+local LTime = createLabel("LTime", 0.1)
+
+-- Nút Bấm Ẩn/Hiện (Nằm trên cùng)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Parent = HopGui
+ToggleBtn.Size = UDim2.new(0, 100, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 1, -50)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Text = "ẨN / HIỆN"
+ToggleBtn.Font = Enum.Font.FredokaOne
+ToggleBtn.TextSize = 14
+ToggleBtn.ZIndex = 10 -- Luôn nằm trên MainFrame
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    isVisible = not isVisible
+    MainFrame.Visible = isVisible
+end)
+
+--------------------------------------------------
+-- LOGIC DỮ LIỆU & KIỂM TRA
+--------------------------------------------------
+local function GetValue()
+    local success, ClientData = pcall(function()
+        return require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
     end)
-    if success and data then
-        return (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME]) or data[CURRENCY_NAME]
+    if success and ClientData then
+        local data = ClientData.get_data()[player.Name]
+        if data then
+            return (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME]) or data[CURRENCY_NAME]
+        end
     end
     return nil
 end
 
-local function performCheck()
-    local currentValue = fetchGingerbread()
-    local sg = player.PlayerGui:FindFirstChild("GingerbreadMonitor_Delayed")
-    local main = sg and sg:FindFirstChild("MainFrame")
-
-    if currentValue ~= nil and main then
-        main.LTotal.Text = "<b>" .. tostring(currentValue) .. "</b>"
-        
-        if lastValue ~= -1 then
-            local diff = currentValue - lastValue
-            main.LDiff.Text = "<b>" .. (diff > 0 and "+" or "") .. tostring(diff) .. "</b>"
-            
-            if diff == 0 then
-                isErrorState = true
-                main.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-                task.wait(2)
-                player:Kick("\n[HỆ THỐNG]\nGingerbread không đổi!")
-            else
-                isErrorState = false
-                main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            end
-        else
-            main.LDiff.Text = "<b>0</b>"
-        end
-        lastValue = currentValue
-    end
+local function ApplyStyle(err)
+    isErrorState = err
+    local bg = err and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 0, 0)
+    local txt = err and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(0, 255, 127)
+    
+    MainFrame.BackgroundColor3 = bg
+    LTotal.TextColor3 = txt
+    LDiff.TextColor3 = txt
+    LTime.TextColor3 = txt
 end
 
---------------------------------------------------
--- VẬN HÀNH
---------------------------------------------------
-
--- 1. Vòng lặp Bảo trì GUI & Đồng hồ (Chống mất GUI khi chuyển map)
+-- Vòng lặp cập nhật (Mỗi giây)
 task.spawn(function()
     while true do
-        local sg = player.PlayerGui:FindFirstChild("GingerbreadMonitor_Delayed")
-        if not sg then
-            CreateGUI()
-            sg = player.PlayerGui:FindFirstChild("GingerbreadMonitor_Delayed")
-        end
+        local elapsed = os.time() - startTime
+        LTime.Text = math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60)
         
-        local main = sg:FindFirstChild("MainFrame")
-        if main then
-            local elapsed = os.time() - startTime
-            main.LTime.Text = "<b>" .. math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60) .. "</b>"
-            
-            -- Cập nhật số liên tục cho mượt
-            local currentVal = fetchGingerbread()
-            if currentVal then main.LTotal.Text = "<b>" .. tostring(currentVal) .. "</b>" end
+        local currentVal = GetValue()
+        if currentVal then
+            LTotal.Text = tostring(currentVal)
+            if lastValue ~= -1 then
+                local diff = currentVal - lastValue
+                LDiff.Text = (diff > 0 and "+" or "") .. tostring(diff)
+            else
+                LDiff.Text = "0"
+            end
         end
         task.wait(1)
     end
 end)
 
--- 2. Vòng lặp Kiểm tra Kick (12 phút)
+-- Vòng lặp kiểm tra Kick (12 phút)
 task.spawn(function()
-    while lastValue == -1 do 
-        lastValue = fetchGingerbread() 
-        task.wait(1) 
-    end
+    repeat lastValue = GetValue() task.wait(1) until lastValue ~= nil
     
     while true do
         task.wait(CHECK_INTERVAL)
-        performCheck()
+        local newVal = GetValue()
+        
+        if newVal ~= nil then
+            if newVal == lastValue then
+                ApplyStyle(true) -- Chuyển sang Đỏ/Đen
+                task.wait(2)
+                player:Kick("\n[HỆ THỐNG]\nSố Gingerbread không đổi trong 12 phút!")
+                return
+            else
+                lastValue = newVal
+                ApplyStyle(false) -- Giữ Xanh/Đen
+            end
+        end
     end
 end)
