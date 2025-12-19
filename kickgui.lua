@@ -4,7 +4,7 @@
     - Cơ chế tự phục hồi dựa trên sự kiện ChildAdded (Roblox không thể ngắt)
 ]]
 
-task.wait(15)
+task.wait(35)
 
 local player = game.Players.LocalPlayer
 local CURRENCY_NAME = "gingerbread_2025"
