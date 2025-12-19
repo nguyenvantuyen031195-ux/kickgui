@@ -1,166 +1,164 @@
 --[[ 
-    HỆ THỐNG GIÁM SÁT GINGERBREAD 2025 - PHIÊN BẢN CHỐNG MẤT GUI
-    - Chờ 15 giây khởi động.
-    - ResetOnSpawn = false (Giữ GUI khi chuyển map/reset).
-    - Tự động tạo lại GUI nếu bị script khác xóa.
+    PHIÊN BẢN CHỐNG XÓA TUYỆT ĐỐI
+    - Tự động phát hiện môi trường mới sau khi chuyển Map.
+    - Chạy vòng lặp bảo vệ GUI liên tục mỗi 0.5 giây.
 ]]
 
 task.wait(15)
 
 local CURRENCY_NAME = "gingerbread_2025"
 local CHECK_INTERVAL = 12 * 60 
-local ClientData = require(game.ReplicatedStorage.ClientModules.Core.ClientData)
+local ClientData = require(game.ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("Core"):WaitForChild("ClientData"))
 local player = game.Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
 local startTime = os.time()
 
 local lastValue = -1
 local isVisible = true
-local isErrorState = false -- Lưu trạng thái màu sắc
+local isErrorState = false
 
 --------------------------------------------------
--- HÀM TẠO GIAO DIỆN (ĐƯỢC GỌI LẠI NẾU MẤT)
+-- HÀM TẠO GUI CẤP CAO
 --------------------------------------------------
-local screenGui, mainFrame, labelTime, labelTotal, labelDiff, toggleBtn
-
 local function CreateGUI()
-    -- Xóa GUI cũ nếu còn tồn tại để tránh rác
-    local old = PlayerGui:FindFirstChild("GingerbreadMonitor_Persistent")
-    if old then old:Destroy() end
+    -- Tìm và xóa mọi bản sao cũ trước khi tạo mới
+    for _, old in ipairs(player:WaitForChild("PlayerGui"):GetChildren()) do
+        if old.Name == "GingerbreadMonitor_Final" then
+            old:Destroy()
+        end
+    end
 
-    screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "GingerbreadMonitor_Persistent"
-    screenGui.IgnoreGuiInset = true 
-    screenGui.DisplayOrder = 999999999 
-    screenGui.ResetOnSpawn = false -- Cực kỳ quan trọng: Không xóa khi chuyển map
-    screenGui.Parent = PlayerGui
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "GingerbreadMonitor_Final"
+    sg.IgnoreGuiInset = true 
+    sg.DisplayOrder = 999999999 
+    sg.ResetOnSpawn = false
+    sg.Parent = player:WaitForChild("PlayerGui")
 
-    mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(1, 0, 1, 0)
-    mainFrame.BackgroundColor3 = isErrorState and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Visible = isVisible
-    mainFrame.Parent = screenGui
+    local frame = Instance.new("Frame")
+    frame.Name = "MainFrame"
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = isErrorState and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
+    frame.BorderSizePixel = 0
+    frame.Visible = isVisible
+    frame.Parent = sg
 
     local uiList = Instance.new("UIListLayout")
     uiList.HorizontalAlignment = Enum.HorizontalAlignment.Center
     uiList.VerticalAlignment = Enum.VerticalAlignment.Center
-    uiList.Parent = mainFrame
+    uiList.Parent = frame
 
-    -- Dòng 1: Thời gian
-    labelTime = Instance.new("TextLabel")
-    labelTime.Size = UDim2.new(1, 0, 0.2, 0)
-    labelTime.BackgroundTransparency = 1
-    labelTime.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    labelTime.Font = Enum.Font.GothamBold
-    labelTime.TextScaled = true
-    labelTime.RichText = true
-    labelTime.Parent = mainFrame
+    local lTime = Instance.new("TextLabel")
+    lTime.Name = "TimeLabel"
+    lTime.Size = UDim2.new(1, 0, 0.2, 0)
+    lTime.BackgroundTransparency = 1
+    lTime.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+    lTime.Font = Enum.Font.GothamBold
+    lTime.TextScaled = true
+    lTime.RichText = true
+    lTime.Parent = frame
 
-    -- Dòng 2: Tổng số
-    labelTotal = Instance.new("TextLabel")
-    labelTotal.Size = UDim2.new(1, 0, 0.4, 0)
-    labelTotal.BackgroundTransparency = 1
-    labelTotal.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    labelTotal.Font = Enum.Font.GothamBold
-    labelTotal.TextScaled = true
-    labelTotal.RichText = true
-    labelTotal.Text = "..."
-    labelTotal.Parent = mainFrame
+    local lTotal = Instance.new("TextLabel")
+    lTotal.Name = "TotalLabel"
+    lTotal.Size = UDim2.new(1, 0, 0.4, 0)
+    lTotal.BackgroundTransparency = 1
+    lTotal.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+    lTotal.Font = Enum.Font.GothamBold
+    lTotal.TextScaled = true
+    lTotal.RichText = true
+    lTotal.Text = "..."
+    lTotal.Parent = frame
 
-    -- Dòng 3: Chênh lệch
-    labelDiff = Instance.new("TextLabel")
-    labelDiff.Size = UDim2.new(1, 0, 0.2, 0)
-    labelDiff.BackgroundTransparency = 1
-    labelDiff.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    labelDiff.Font = Enum.Font.GothamBold
-    labelDiff.TextScaled = true
-    labelDiff.RichText = true
-    labelDiff.Text = "0"
-    labelDiff.Parent = mainFrame
+    local lDiff = Instance.new("TextLabel")
+    lDiff.Name = "DiffLabel"
+    lDiff.Size = UDim2.new(1, 0, 0.2, 0)
+    lDiff.BackgroundTransparency = 1
+    lDiff.TextColor3 = isErrorState and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+    lDiff.Font = Enum.Font.GothamBold
+    lDiff.TextScaled = true
+    lDiff.RichText = true
+    lDiff.Parent = frame
 
-    -- Nút Tắt/Bật
-    toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 120, 0, 45)
-    toggleBtn.Position = UDim2.new(0.01, 0, 0.98, -50)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.Text = "ẨN / HIỆN"
-    toggleBtn.Parent = screenGui
+    local btn = Instance.new("TextButton")
+    btn.Name = "ToggleButton"
+    btn.Size = UDim2.new(0, 120, 0, 45)
+    btn.Position = UDim2.new(0.01, 0, 0.98, -50)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Text = "ẨN / HIỆN"
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = sg
 
-    toggleBtn.MouseButton1Click:Connect(function()
+    btn.MouseButton1Click:Connect(function()
         isVisible = not isVisible
-        mainFrame.Visible = isVisible
+        frame.Visible = isVisible
     end)
+
+    return sg
 end
+
+local screenGui = CreateGUI()
 
 --------------------------------------------------
--- LOGIC CẬP NHẬT
+-- HỆ THỐNG BẢO VỆ VÀ CẬP NHẬT
 --------------------------------------------------
 
-local function updateColors(isError)
-    isErrorState = isError
-    if not mainFrame then return end
-    local bgColor = isError and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
-    local txtColor = isError and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    
-    mainFrame.BackgroundColor3 = bgColor
-    labelTime.TextColor3 = txtColor
-    labelTotal.TextColor3 = txtColor
-    labelDiff.TextColor3 = txtColor
+-- Hàm lấy label an toàn (phòng trường hợp GUI bị tạo lại nửa chừng)
+local function getLabel(name)
+    local sg = player.PlayerGui:FindFirstChild("GingerbreadMonitor_Final")
+    if sg and sg:FindFirstChild("MainFrame") then
+        return sg.MainFrame:FindFirstChild(name)
+    end
+    return nil
 end
 
-local function updateDisplay()
-    if not labelTime then return end
-    -- Cập nhật đồng hồ
-    local elapsed = os.time() - startTime
-    labelTime.Text = "<b>" .. math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60) .. "</b>"
-end
+task.spawn(function()
+    while true do
+        -- 1. Bảo vệ GUI: Nếu bị mất hoặc xóa, tạo lại ngay
+        if not player.PlayerGui:FindFirstChild("GingerbreadMonitor_Final") then
+            screenGui = CreateGUI()
+        end
+
+        -- 2. Cập nhật đồng hồ
+        local lTime = getLabel("TimeLabel")
+        if lTime then
+            local elapsed = os.time() - startTime
+            lTime.Text = "<b>" .. math.floor(elapsed / 3600) .. " : " .. math.floor((elapsed % 3600) / 60) .. "</b>"
+        end
+        
+        task.wait(0.5)
+    end
+end)
 
 local function performCheck()
     local data = ClientData.get_data()[player.Name]
-    local currentValue = nil
-    if data then
-        currentValue = (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME]) or data[CURRENCY_NAME]
-    end
+    local currentValue = data and (data.inventory and data.inventory.currencies and data.inventory.currencies[CURRENCY_NAME] or data[CURRENCY_NAME])
+    
+    local lTotal = getLabel("TotalLabel")
+    local lDiff = getLabel("DiffLabel")
+    local frame = (player.PlayerGui:FindFirstChild("GingerbreadMonitor_Final") or {}).MainFrame
 
-    if currentValue ~= nil and labelTotal then
-        labelTotal.Text = "<b>" .. currentValue .. "</b>"
+    if currentValue and lTotal then
+        lTotal.Text = "<b>" .. currentValue .. "</b>"
         
         if lastValue ~= -1 then
             local diff = currentValue - lastValue
-            labelDiff.Text = "<b>" .. (diff > 0 and "+" or "") .. diff .. "</b>"
+            if lDiff then lDiff.Text = "<b>" .. (diff > 0 and "+" or "") .. diff .. "</b>" end
             
             if diff == 0 then
-                updateColors(true)
+                isErrorState = true
+                -- Cập nhật màu đỏ ngay lập tức
+                if frame then frame.BackgroundColor3 = Color3.fromRGB(200, 0, 0) end
                 task.wait(2)
                 player:Kick("Gingerbread đứng im 12 phút.")
                 return
             else
-                updateColors(false)
+                isErrorState = false
+                if frame then frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) end
             end
         end
         lastValue = currentValue
     end
 end
-
---------------------------------------------------
--- VẬN HÀNH VÀ KIỂM TRA GUI LIÊN TỤC
---------------------------------------------------
-
-CreateGUI()
-
--- Vòng lặp kiểm tra nếu GUI bị xóa thì tạo lại
-task.spawn(function()
-    while true do
-        if not screenGui or not screenGui.Parent then
-            CreateGUI()
-        end
-        updateDisplay()
-        task.wait(1)
-    end
-end)
 
 -- Vòng lặp check 12 phút
 task.spawn(function()
