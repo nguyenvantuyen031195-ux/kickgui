@@ -78,7 +78,7 @@ ToggleBtn.Size = UDim2.new(0, 100, 0, 40)
 ToggleBtn.Position = UDim2.new(0, 10, 1, -50)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleBtn.Text = "ẨN / HIỆN"
+ToggleBtn.Text = "HIDE GUI"
 ToggleBtn.Font = Enum.Font.FredokaOne
 ToggleBtn.TextSize = 14
 ToggleBtn.ZIndex = 10
@@ -135,7 +135,7 @@ task.spawn(function()
                 LDiff.Text = "0"
             end
         end
-        task.wait(1)
+        task.wait(15)
     end
 end)
 
